@@ -12,7 +12,7 @@ from django.contrib.auth.models import User,Group
 from utils.logger import logger
 from dao.base import DjangoCustomCursors,DataHandle
 from django.http import QueryDict
-from utils.ansible_api_v2 import ANSRunner
+from utils.ansible.runner import ANSRunner
 from apps.models import Project_Config
 
   
@@ -191,8 +191,7 @@ class AssetsBase(DataHandle,DjangoCustomCursors):
                 if User_Server.objects.get(user=user,assets=assets):return assets
             except Exception as ex:
                 logger.warn(msg="查询用户资产信息失败: {ex}".format(ex=str(ex)))  
-                return False
-        
+                return False        
         return False
     
     def query_user_assets(self,request,assetsList):
