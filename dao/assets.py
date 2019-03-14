@@ -1,6 +1,6 @@
 #!/usr/bin/env python  
 # _#_ coding:utf-8 _*_ 
-import uuid
+import uuid,xlrd
 from asset.models import *
 from deploy.models import *
 from databases.models import *
@@ -17,7 +17,7 @@ from apps.models import Project_Config
 
   
 
-class AssetsBase(DataHandle,DjangoCustomCursors):
+class AssetsBase(DataHandle):
     def __init__(self):
         super(AssetsBase, self).__init__()
         self.uuid = uuid.uuid4()
@@ -62,48 +62,42 @@ class AssetsBase(DataHandle,DjangoCustomCursors):
     
     def manufacturerList(self):
         try:
-            self.execute("""SELECT manufacturer from opsmanage_assets WHERE  manufacturer is not null GROUP BY manufacturer""");
-            return [ ds.get('manufacturer') for ds in self.dictfetchall() ]  
+            return [ ds.manufacturer  for ds in Assets.objects.raw("""SELECT manufacturer,id from opsmanage_assets WHERE  manufacturer is not null GROUP BY manufacturer""")]
         except Exception as ex:
             logger.error(msg="获取设备厂商失败:{ex}".format(ex=ex))
         return []        
 
     def providerList(self):
         try:
-            self.execute("""SELECT provider from opsmanage_assets WHERE  provider is not null GROUP BY provider""");
-            return [ ds.get('provider') for ds in self.dictfetchall() ]  
+            return [ ds.provider  for ds in Assets.objects.raw("""SELECT provider,id from opsmanage_assets WHERE  provider is not null GROUP BY provider""")] 
         except Exception as ex:
             logger.error(msg="获取供应商失败:{ex}".format(ex=ex))
         return []  
 
     def modelList(self):
         try:
-            self.execute("""SELECT model from opsmanage_assets WHERE  model is not null GROUP BY model""");
-            return [ ds.get('model') for ds in self.dictfetchall() ]  
+            return [ ds.model  for ds in Assets.objects.raw("""SELECT model,id from opsmanage_assets WHERE  model is not null GROUP BY model""")]
         except Exception as ex:
             logger.error(msg="获取设备型号失败:{ex}".format(ex=ex))
         return [] 
     
     def cpuList(self):
         try:
-            self.execute("""SELECT cpu from opsmanage_server_assets WHERE  cpu is not null GROUP BY cpu""");
-            return [ ds.get('cpu') for ds in self.dictfetchall() ]  
+            return [ ds.cpu  for ds in Server_Assets.objects.raw("""SELECT cpu,id from opsmanage_server_assets WHERE  cpu is not null GROUP BY cpu""")]
         except Exception as ex:
             logger.error(msg="获取cpu型号失败:{ex}".format(ex=ex))
         return [] 
                
     def systemList(self):
         try:
-            self.execute("""SELECT system from opsmanage_server_assets WHERE  system is not null GROUP BY system""");
-            return [ ds.get('system') for ds in self.dictfetchall() ]  
+            return [ ds.system  for ds in Server_Assets.objects.raw("""SELECT system,id from opsmanage_server_assets WHERE  system is not null GROUP BY system""")]
         except Exception as ex:
             logger.error(msg="获取操作系统失败:{ex}".format(ex=ex))
         return [] 
     
     def kernelList(self):
         try:
-            self.execute("""SELECT kernel from opsmanage_server_assets WHERE  kernel is not null GROUP BY kernel""");
-            return [ ds.get('kernel') for ds in self.dictfetchall() ]  
+            return [ ds.kernel  for ds in Server_Assets.objects.raw("""SELECT kernel,id from opsmanage_server_assets WHERE  kernel is not null GROUP BY kernel""")]
         except Exception as ex:
             logger.error(msg="获取内核版本失败:{ex}".format(ex=ex))
         return []     
@@ -347,7 +341,94 @@ class AssetsBase(DataHandle,DjangoCustomCursors):
             data['network'] = self.get_network(assets)  
             data['tags'] = self.assets_tags(assets)      
         return data      
-
+    
+    def read_import_file(self,filename):
+        bk = xlrd.open_workbook(filename)
+        dataList = []
+        try:
+            server = bk.sheet_by_name("server")
+            net = bk.sheet_by_name("net")
+            for i in range(1,server.nrows):
+                dataList.append(server.row_values(i)) 
+            for i in range(1,net.nrows):
+                dataList.append(net.row_values(i))     
+        except Exception as ex:
+            logger.warn(msg="读取导入的资产文件失败: {ex}".format(ex=str(ex)))  
+            return "读取导入的资产文件失败: {ex}".format(ex=str(ex))    
+        return dataList      
+    
+    def import_assets(self,filename):
+        dataList = self.read_import_file(filename)
+        if isinstance(dataList, str):return dataList
+        #获取服务器列表
+        for data in dataList:
+            assets = {
+                      'assets_type':data[0],
+                      'name':data[1],
+                      'sn':data[2],
+                      'buy_user':int(data[5]),
+                      'management_ip':data[6],
+                      'manufacturer':data[7],
+                      'model':data[8],
+                      'provider':data[9],
+                      'status':int(data[10]),
+                      'put_zone':int(data[11]),
+                      'group':int(data[12]),
+                      'project':int(data[13]),
+                      'business':int(data[14]),
+                      }
+            if data[3]:assets['buy_time'] = xlrd.xldate.xldate_as_datetime(data[3],0)
+            if data[4]:assets['expire_date'] = xlrd.xldate.xldate_as_datetime(data[4],0)
+            if assets.get('assets_type') in ['vmser','server']:
+                server_assets = {
+                          'ip':data[15],
+                          'keyfile':data[16],
+                          'username':data[17],
+                          'passwd':data[18],
+                          'hostname':data[19],
+                          'port':data[20],
+                          'raid':data[21],
+                          'line':data[22],
+                          } 
+            else:
+                net_assets = {
+                            'ip':data[15],
+                            'bandwidth':data[16],
+                            'port_number': data[17],
+                            'firmware':data[18],
+                            'cpu':data[19],
+                            'stone':data[20],
+                            'configure_detail': data[21]                              
+                              }                                                  
+            count = Assets.objects.filter(name=assets.get('name')).count()
+            if count == 1:
+                assetsObj = Assets.objects.get(name=assets.get('name'))
+                Assets.objects.filter(name=assets.get('name')).update(**assets)
+                try:
+                    if assets.get('assets_type') in ['vmser','server']:
+                        Server_Assets.objects.filter(assets=assetsObj).update(**server_assets)
+                    elif assets.get('assets_type') in ['switch','route','printer','scanner','firewall','storage','wifi']:
+                        Network_Assets.objects.filter(assets=assetsObj).update(**net_assets)
+                except  Exception as ex:
+                    logger.warn(msg="批量更新资产失败: {ex}".format(ex=str(ex)))
+                    return "批量更新资产失败: {ex}".format(ex=str(ex))
+            else:
+                try:
+                    assetsObj = Assets.objects.create(**assets)   
+                except Exception as ex:
+                    logger.warn(msg="批量写入资产失败: {ex}".format(ex=str(ex)))
+                    return "批量写入资产失败: {ex}".format(ex=str(ex))
+                if assetsObj:
+                    try:  
+                        if assets.get('assets_type') in ['vmser','server']:
+                            Server_Assets.objects.create(assets=assetsObj,**server_assets)
+                        elif assets.get('assets_type') in ['switch','route','printer','scanner','firewall','storage','wifi']:
+                            Network_Assets.objects.create(assets=assetsObj,**net_assets)                          
+                    except Exception as ex:
+                        logger.warn(msg="批量更新资产失败: {ex}".format(ex=str(ex)))                        
+                        assetsObj.delete()
+                        return "批量更新资产失败: {ex}".format(ex=str(ex))
+               
 
 
 class AssetsCount(DjangoCustomCursors):
