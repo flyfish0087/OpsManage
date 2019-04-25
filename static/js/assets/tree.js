@@ -1,10 +1,3 @@
-function makeRandomId() {
-  var text = "";
-  var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  for (var i = 0; i < 8; i++)
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
-  return text;
-}
 var webssh = false
 function make_terminal(element, size, ws_url) { 
     var term = new Terminal({
@@ -836,9 +829,14 @@ $(document).ready(function () {
 						}else{
 							var icon = "fa fa-desktop assets-offline"
 						}
+						if (response[i]["mark"]){
+							var text = response[i]["ip"]+' | '+response[i]["mark"]
+						}else{
+							var text = response[i]["ip"]
+						}
                         var newNode = {
                                 "id": response[i]["id"]+30000,
-                                "text": response[i]["ip"],
+                                "text": text,
                                 "icon": icon
                             }        						
 						$('#projectTree').jstree('create_node', parent, newNode, position, false, false);	
