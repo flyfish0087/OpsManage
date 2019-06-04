@@ -107,7 +107,7 @@ function requests(method,url,async){
 
 function makeFileDownloadResultTable(dataList){
 	var trHtml = '';
-	for (var i = 1; i < dataList.length; ++i) {
+	for (var i = 0; i < dataList.length; ++i) {
 		if (dataList[i]["islnk"] ){
 			var button = '<button type="button" class="btn btn-xs btn-default" disabled><abbr title="软连接不支持下载"><i class="fa  fa-cloud-download"></i></button>';
 		}else if(dataList[i]["size"] > 500 ){
@@ -198,7 +198,8 @@ $(document).ready(function() {
 		$("select[name='custom'] option:selected").each(function(){
 			serverList.push($(this).val());
         });		
-		if (value>=1 && serverList.length){			
+		if (value>=1 && serverList.length){	
+			$("#result").html('<i class="fa fa-spinner"> 服务器正在处理...</i>');
 	    	$.ajax({  
 	            cache: true,  
 	            type: "POST",  
@@ -220,7 +221,6 @@ $(document).ready(function() {
 	            success: function(response) {  
 	            	btnObj.attr('disabled',false);
 					if (response["code"] == 200){
-						console.log(response["data"])
 						makeFileDownloadResultTable(response["data"])
 					}
 					else {
